@@ -6,10 +6,8 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiohttp
 
-# Включаем логирование
 logging.basicConfig(level=logging.INFO)
 
-# Получаем токен бота из настроек Render
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Переменная TELEGRAM_TOKEN не задана в настройках Render!")
@@ -20,18 +18,18 @@ dp = Dispatcher()
 @dp.message(Command("start"))
 async def send_welcome(message: types.Message):
     await message.answer(
-        "🎬 **Привет! Я твой кинопоиск (на базе Kodik).**\n\n"
-        "Напиши мне название фильма, сериала или аниме, и я найду его!",
+        "🎬 **Привет! Я твой кинопоиск.**\n\n"
+        "Напиши мне название фильма, сериала или аниме, и я найду ссылку на просмотр!",
         parse_mode="Markdown"
     )
 
 @dp.message(F.text)
 async def search_movie(message: types.Message):
     query = message.text
-    waiting_msg = await message.answer("🔍 Ищу в базе Kodik...")
+    waiting_msg = await message.answer("🔍 Ищу... Подожди секунду...")
     
-    # Используем публичное зеркало API Kodik, которое работает БЕЗ токена
-    url = f"https://timeenjoy.club/api/kodik?title={query}"
+    # Используем самое свежее и стабильное зеркало Kinobox
+    url = f"https://kinobox.net/api/films/search?query={query}"
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -44,36 +42,34 @@ async def search_movie(message: types.Message):
                         return
                     
                     builder = InlineKeyboardBuilder()
-                    text_reply = "🎬 **Вот что я нашёл в Kodik:**\n\n"
+                    text_reply = "🎬 **Вот что я нашёл для тебя:**\n\n"
                     
-                    # Показываем первые 5 результатов
                     for i, movie in enumerate(movies[:5]):
                         title = movie.get("title", "Без названия")
                         year = movie.get("year", "Год неизвестен")
-                        link = movie.get("link", "")
+                        rating = movie.get("rating", "-")
+                        kp_id = movie.get("kinopoiskId")
                         
-                        if not link:
+                        if not kp_id:
                             continue
                             
-                        # Если ссылка относительная, делаем её полной
-                        if link.startswith("//"):
-                            link = "https:" + link
-                            
-                        text_reply += f"{i+1}. **{title}** ({year})\n"
-                        builder.button(text=f"Смотреть вариант {i+1} 🍿", url=link)
+                        text_reply += f"{i+1}. **{title}** ({year}) — Рейтинг: {rating}\n"
+                        # Ссылка сразу ведет на плеер этого зеркала
+                        watch_url = f"https://kinobox.net/player?kp={kp_id}"
+                        builder.button(text=f"Смотреть вариант {i+1} 🍿", url=watch_url)
                     
                     builder.adjust(1)
                     await waiting_msg.delete()
                     await message.answer(text_reply, reply_markup=builder.as_markup(), parse_mode="Markdown")
                 else:
-                    await waiting_msg.edit_text("⚠️ Ошибка поиска. Попробуй другое название или зайди позже.")
+                    await waiting_msg.edit_text("⚠️ Ошибка поиска. Попробуй другое название.")
     except Exception as e:
-        logging.error(f"Ошибка: {e}")
-        await waiting_msg.edit_text("💥 Произошла ошибка при поиске.")
+        logging.error(f"Ошибка поиска: {e}")
+        await waiting_msg.edit_text("💥 Произошла ошибка при поиске. Попробуй ещё раз.")
 
 async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+        
