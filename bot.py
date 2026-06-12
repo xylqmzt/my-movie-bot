@@ -34,7 +34,8 @@ async def search_movie(message: types.Message):
     waiting_msg = await message.answer("🔍 Ищу... Подожди секунду...")
     
     # URL API Кинобокса для поиска по тексту
-    url = f"https://kinobox.tv/api/films/search?query={query}"
+    url = f"https://api.kinobox.tv/films/search?query={query}"
+    
     
     try:
         async with aiohttp.ClientSession() as session:
