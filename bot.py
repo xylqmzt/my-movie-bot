@@ -9,7 +9,7 @@ import aiohttp
 # Включаем логирование
 logging.basicConfig(level=logging.INFO)
 
-# Получаем токен из настроек Render
+# Получаем токен бота из настроек Render
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Переменная TELEGRAM_TOKEN не задана в настройках Render!")
@@ -17,25 +17,21 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Главное меню при команде /start
 @dp.message(Command("start"))
 async def send_welcome(message: types.Message):
     await message.answer(
-        "🎬 **Привет! Я твой личный кинопоиск.**\n\n"
-        "Просто напиши мне название фильма, мультфильма или сериала, "
-        "и я найду ссылку на просмотр!",
+        "🎬 **Привет! Я твой кинопоиск (на базе Kodik).**\n\n"
+        "Напиши мне название фильма, сериала или аниме, и я найду его!",
         parse_mode="Markdown"
     )
 
-# Обработка текстовых сообщений (поиск фильма по названию)
 @dp.message(F.text)
 async def search_movie(message: types.Message):
     query = message.text
-    waiting_msg = await message.answer("🔍 Ищу... Подожди секунду...")
+    waiting_msg = await message.answer("🔍 Ищу в базе Kodik...")
     
-    # URL API Кинобокса для поиска по тексту
-    url = f"https://api.kinobox.tv/films/search?query={query}"
-    
+    # Используем публичное зеркало API Kodik, которое работает БЕЗ токена
+    url = f"https://timeenjoy.club/api/kodik?title={query}"
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -43,46 +39,41 @@ async def search_movie(message: types.Message):
                 if response.status == 200:
                     movies = await response.json()
                     
-                    # Если ничего не нашли
                     if not movies or len(movies) == 0:
-                        await waiting_msg.edit_text("😢 Ничего не нашлось по такому названию. Попробуй проверить ошибки в тексте.")
+                        await waiting_msg.edit_text("😢 Ничего не нашлось. Проверь, нет ли ошибок в названии.")
                         return
                     
-                    # Берем первые 5 результатов, чтобы не спамить
                     builder = InlineKeyboardBuilder()
-                    text_reply = "🎬 **Вот что я нашёл. Выбери нужный вариант:**\n\n"
+                    text_reply = "🎬 **Вот что я нашёл в Kodik:**\n\n"
                     
+                    # Показываем первые 5 результатов
                     for i, movie in enumerate(movies[:5]):
                         title = movie.get("title", "Без названия")
                         year = movie.get("year", "Год неизвестен")
-                        rating = movie.get("rating", "-")
-                        kp_id = movie.get("kinopoiskId")
+                        link = movie.get("link", "")
                         
-                        if not kp_id:
+                        if not link:
                             continue
                             
-                        # Добавляем фильм в текст со своим номером
-                        text_reply += f"{i+1}. **{title}** ({year}) — Рейтинг: {rating}\n"
-                        
-                        # Делаем кнопку, которая ведет на бесплатный плеер Kinobox
-                        watch_url = f"https://kinobox.tv/player?kp={kp_id}"
-                        builder.button(text=f"Смотреть вариант {i+1} 🍿", url=watch_url)
+                        # Если ссылка относительная, делаем её полной
+                        if link.startswith("//"):
+                            link = "https:" + link
+                            
+                        text_reply += f"{i+1}. **{title}** ({year})\n"
+                        builder.button(text=f"Смотреть вариант {i+1} 🍿", url=link)
                     
-                    # Выстраиваем кнопки в один столбик
                     builder.adjust(1)
-                    
-                    await waiting_msg.delete() # Удаляем надпись "Ищу..."
+                    await waiting_msg.delete()
                     await message.answer(text_reply, reply_markup=builder.as_markup(), parse_mode="Markdown")
                 else:
-                    await waiting_msg.edit_text("⚠️ Ошибка сервера поиска. Попробуй чуть позже.")
+                    await waiting_msg.edit_text("⚠️ Ошибка поиска. Попробуй другое название или зайди позже.")
     except Exception as e:
-        logging.error(f"Ошибка поиска: {e}")
-        await waiting_msg.edit_text("💥 Произошла ошибка при поиске. Попробуй ещё раз.")
+        logging.error(f"Ошибка: {e}")
+        await waiting_msg.edit_text("💥 Произошла ошибка при поиске.")
 
-# Запуск бота
 async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
-                        
+    
